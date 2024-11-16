@@ -1,0 +1,498 @@
+---
+title: "Shiny"
+author: "Chang Lu"
+date: "2024-11-16"
+output: html_document
+runtime: shiny
+---
+
+
+## Your First Shiny App
+
+This document demonstrates two Shiny apps:
+1. A **Text Input App** that takes a user's name and displays a greeting.
+2. A **Slider Input App** that multiplies a slider value by 5 and displays the result.
+3. A **Caluculator App** that displays the computed result in real-time.
+4. A **Dynamic Multiplication and Adjustment Calculator App** that dynamically calculates the product of two inputs amd adjusts the product by adding fixed values.
+5. A **Interactive Data Exploration App** that users can select a dataset from a predefined list (economics, faithfuld, or seals), all of which are included in the ggplot2 package. Then view a summary of the selected dataset, providing key statistical insights and visualize the dataset as a plot, dynamically generated based on the their selection.
+
+Below, you can see the code and interactive examples for each app, as well as their differences.
+
+---
+
+### Example 1: Text Input App
+
+
+```{r}
+library(shiny)
+
+ui <- fluidPage(
+    textInput("name", "What's your name?"),
+    textOutput("greeting")
+)
+
+server <- function(input, output, session) {
+    output$greeting <- renderText({
+        paste0("Hello ", input$name)
+    })
+}
+
+shinyApp(ui, server)
+```
+
+### Example 2: Slider Input App
+
+```{r}
+ui <- fluidPage(
+    sliderInput("x", label = "If x is", min = 1, max = 50, value = 30),
+    "then x times 5 is",
+    textOutput("product")
+)
+
+server <- function(input, output, session) {
+    output$product <- renderText({ 
+        input$x * 5
+    })
+}
+
+shinyApp(ui, server)
+```
+
+### Example 3: Calculator App
+```{r}
+ui <- fluidPage(
+    sliderInput("x", label = "If x is", min = 1, max = 50, value = 30),
+    sliderInput("y", label = "and y is", min = 1, max = 50, value = 30),
+    "then x times y is",
+    textOutput("product")
+)
+
+server <- function(input, output, session) {
+    output$product <- renderText({ 
+       input$x * input$y
+    })
+}
+
+shinyApp(ui, server)
+```
+
+### Example 4: Dynamic Multiplication and Adjustment Calculator App
+```{r}
+
+ui <- fluidPage(
+    sliderInput("x", "If x is", min = 1, max = 50, value = 30),
+    sliderInput("y", "and y is", min = 1, max = 50, value = 5),
+    "then, (x * y) is", textOutput("product"),
+    "and, (x * y) + 5 is", textOutput("product_plus5"),
+    "and (x * y) + 10 is", textOutput("product_plus10")
+)
+
+server <- function(input, output, session) {
+    # Add this reactive expression to reduce 
+    # amount of duplicated code
+    product <- reactive({
+        input$x * input$y
+    })
+    output$product <- renderText({ 
+        product()
+    })
+    output$product_plus5 <- renderText({ 
+        product() + 5
+    })
+    output$product_plus10 <- renderText({ 
+        product() + 10
+    })
+}
+
+
+shinyApp(ui, server)
+```
+
+### Example 5: Interactive Data Exploration App
+```{r}
+library(ggplot2)
+
+datasets <- c("economics", "faithfuld", "seals")
+
+ui <- fluidPage(
+    selectInput("dataset", "Dataset", choices = datasets),
+    verbatimTextOutput("summary"),
+    # 1st Bug: tableOutput -> plotOutput
+    plotOutput("plot")
+)
+
+server <- function(input, output, session) {
+    dataset <- reactive({
+        get(input$dataset, "package:ggplot2")
+    })
+    # 2nd Bug: Spelling
+    output$summary <- renderPrint({
+        summary(dataset())
+    })
+    output$plot <- renderPlot({
+      # 3rd Bug: dataset -> dataset() 
+        plot(dataset())
+    }, res = 96)
+}
+
+shinyApp(ui, server)
+```
+
+## Exercise 2.3.5
+
+### 1
+
+a. renderPrint(summary(mtcars)) with verbatimTextOutput
+Correct: Yes
+Reason: summary(mtcars) produces a detailed, console-like output (e.g., summary statistics), which requires verbatimTextOutput to preserve the formatting.
+
+b. renderText("Good morning!") with textOutput
+Correct: Yes
+Reason: "Good morning!" is simple text without special formatting, so textOutput is appropriate.
+
+c. renderPrint(t.test(1:5, 2:6)) with verbatimTextOutput
+Correct: Yes
+Reason: The t.test output is a structured result of a statistical test, displayed in console-like formatting, which is correctly handled by verbatimTextOutput.
+
+d. renderText(str(lm(mpg ~ wt, data = mtcars))) with verbatimTextOutput
+Correct: No
+Reason: While renderText is used, the str() function's output is console-like and is better suited for renderPrint paired with verbatimTextOutput. Using renderText here would lead to improper formatting of the output.
+
+### 2
+
+```{r}
+ui <- fluidPage(
+    sliderInput("n", "Number of Points", min = 5, max = 20, value = 5),
+    plotOutput("plot", width = "700px", height = "300px"),
+    p("This is a scatterplot of numbers from 1 to n(as you choose).")
+)
+
+server <- function(input, output, session) {
+    output$plot <- renderPlot({
+        plot(1:input$n)
+    }, res = 96)
+}
+
+shinyApp(ui, server)
+```
+
+### 3
+```{r}
+library(DT)
+
+ui <- fluidPage(
+    titlePanel("Interactive mtcars Data Table"),
+    
+    # Row selection input
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("rows", "Rows per page:", min = 5, max = 20, value = 5, step = 5),
+            selectInput("cyl_filter", "Filter by number of cylinders:",
+                        choices = c("All", unique(mtcars$cyl)), selected = "All"),
+            downloadButton("downloadData", "Download Table")
+        ),
+        
+        mainPanel(
+            dataTableOutput("table")
+        )
+    )
+)
+
+server <- function(input, output, session) {
+    # Reactive expression to filter data based on selected cylinders
+    filteredData <- reactive({
+        if (input$cyl_filter == "All") {
+            mtcars
+        } else {
+            subset(mtcars, cyl == as.numeric(input$cyl_filter))
+        }
+    })
+    
+    # Render the DataTable with reactive options
+    output$table <- renderDataTable({
+        datatable(filteredData(),
+                  options = list(pageLength = input$rows,
+                                 ordering = TRUE,
+                                 searching = TRUE))
+    })
+    
+    # Download handler for exporting the data
+    output$downloadData <- downloadHandler(
+        filename = function() { "filtered_mtcars.csv" },
+        content = function(file) {
+            write.csv(filteredData(), file)
+        }
+    )
+}
+
+shinyApp(ui, server)
+```
+
+### 4
+```{r}
+library(reactable)
+library(dplyr)
+
+ui <- fluidPage(
+  titlePanel("Interactive mtcars Table"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("cyl_filter", "Filter by Cylinders:",
+                  choices = c("All", unique(mtcars$cyl)), selected = "All"),
+      downloadButton("downloadData", "Download Table")
+    ),
+    mainPanel(
+      reactableOutput("table")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  # Reactive expression to filter data based on user input
+  filteredData <- reactive({
+    if (input$cyl_filter == "All") {
+      mtcars
+    } else {
+      mtcars %>% filter(cyl == as.numeric(input$cyl_filter))
+    }
+  })
+  
+  # Render the interactive table
+  output$table <- renderReactable({
+    reactable(
+      filteredData(),
+      searchable = TRUE,    # Enable search
+      striped = TRUE,       # Add striped rows for readability
+      highlight = TRUE,     # Highlight rows on hover
+      bordered = TRUE,      # Add borders to the table
+      defaultPageSize = 10, # Show 10 rows per page
+      columns = list(
+        mpg = colDef(name = "Miles/Gallon", 
+                     style = function(value) {
+                       if (value > 20) list(color = "green", fontWeight = "bold") else NULL
+                     }),
+        cyl = colDef(name = "Cylinders", align = "center"),
+        hp = colDef(name = "Horsepower")
+      )
+    )
+  })
+  
+  # Add a download handler for exporting the filtered data
+  output$downloadData <- downloadHandler(
+    filename = function() { "filtered_mtcars.csv" },
+    content = function(file) {
+      write.csv(filteredData(), file)
+    }
+  )
+}
+
+shinyApp(ui, server)
+```
+
+## Exercise 3.3.6
+
+### 1
+```{r}
+server1 <- function(input, output, session) {
+    output$greeting <- renderText({
+        paste0("Hello ", input$name)
+    })
+}
+```
+
+Explanation: Fixes the issue by correctly using renderText and referencing input$name.
+
+### 2 
+```{r}
+server2 <- function(input, output, session) {
+    greeting <- reactive({
+        paste0("Hello ", input$name)
+    })
+    output$greeting <- renderText({
+        greeting()
+    })
+}
+```
+
+Explanation: 
+1. Introduces a reactive expression greeting to handle the text construction separately.
+2. Requires parentheses when using the reactive greeting().
+
+### 3
+```{r}
+server3 <- function(input, output, session) {
+    output$greeting <- renderText({
+        paste0("Hello ", input$name)
+    })
+}
+```
+Explanation: Fixes a spelling error (output$greeting instead of output$greting) and ensures renderText is used properly.
+
+## Exercise 4.8
+
+### 2
+```{r}
+# downloading the data
+dir.create("neiss")
+
+download <- function(name) {
+  url <- "https://github.com/hadley/mastering-shiny/raw/main/neiss/"
+  download.file(paste0(url, name), paste0("neiss/", name), quiet = TRUE)
+}
+
+download("injuries.tsv.gz")
+download("population.tsv")
+download("products.tsv")
+```
+```{r}
+library(forcats)
+injuries <- vroom::vroom("neiss/injuries.tsv.gz")
+injuries
+```
+
+```{r}
+# flipped code
+injuries %>%
+  mutate(diag = fct_infreq(fct_lump(diag, n = 5))) %>%
+  group_by(diag) %>%
+  summarise(n = as.integer(sum(weight)))
+```
+
+### 3
+
+#### Purpose
+
+This Shiny app analyzes injury data (injuries.tsv.gz) based on user-selected product codes (products.tsv). It allows users to:
+
+View summary tables of injuries categorized by diagnosis, body part, and location.
+Visualize the relationship between age and injury count or rate by gender.
+Explore specific injury narratives with a single click.
+
+#### code
+```{r}
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(vroom)
+library(shiny)
+
+# Load datasets
+injuries <- vroom::vroom("neiss/injuries.tsv.gz")
+products <- vroom::vroom("neiss/products.tsv")
+population <- vroom::vroom("neiss/population.tsv")
+
+# Custom function to count and summarize top categories
+count_top <- function(df, var, n = 5) {
+  df %>%
+    mutate({{ var }} := fct_lump(fct_infreq({{ var }}), n = n)) %>%
+    group_by({{ var }}) %>%
+    summarise(n = as.integer(sum(weight)), .groups = "drop")
+}
+
+# Define UI
+ui <- fluidPage(
+  titlePanel("Injury Data Explorer"),
+  fluidRow(
+    column(8,
+           selectInput("code", "Product",
+                       choices = setNames(products$prod_code, products$title),
+                       width = "100%")
+    ),
+    column(2, selectInput("y", "Y axis", c("rate", "count"))),
+    column(2, numericInput("num_rows", "Number of Rows", value = 5, min = 0, max = 10))
+  ),
+  fluidRow(
+    column(4, tableOutput("diag")),
+    column(4, tableOutput("body_part")),
+    column(4, tableOutput("location"))
+  ),
+  fluidRow(
+    column(12, plotOutput("age_sex"))
+  ),
+  fluidRow(
+    column(2, actionButton("story", "Tell me a story")),
+    column(8, textOutput("narrative")),
+    column(2, downloadButton("download", "Download Data"))
+  )
+)
+
+# Define server logic
+server <- function(input, output, session) {
+  # Dynamically update product dropdown
+  observe({
+    updateSelectInput(session, "code", choices = setNames(products$prod_code, products$title))
+  })
+  
+  # Reactive dataset filtered by product code
+  selected <- reactive({
+    req(input$code)  # Ensure valid input
+    injuries %>% filter(prod_code == input$code)
+  })
+  
+  # Render summary tables with input validation
+  output$diag <- renderTable({
+    data <- count_top(selected(), diag)
+    req(input$num_rows <= nrow(data))  # Validate number of rows
+    data %>% slice(1:input$num_rows)
+  }, width = "100%")
+  
+  output$body_part <- renderTable({
+    data <- count_top(selected(), body_part)
+    req(input$num_rows <= nrow(data))
+    data %>% slice(1:input$num_rows)
+  }, width = "100%")
+  
+  output$location <- renderTable({
+    data <- count_top(selected(), location)
+    req(input$num_rows <= nrow(data))
+    data %>% slice(1:input$num_rows)
+  }, width = "100%")
+  
+  # Generate summary for plotting
+  summary <- reactive({
+    selected() %>%
+      count(age, sex, wt = weight) %>%
+      left_join(population, by = c("age", "sex")) %>%
+      mutate(rate = n / population * 1e4)
+  })
+  
+  # Render plot
+  output$age_sex <- renderPlot({
+    req(summary())
+    if (input$y == "count") {
+      summary() %>%
+        ggplot(aes(age, n, colour = sex)) +
+        geom_line() +
+        labs(y = "Estimated number of injuries")
+    } else {
+      summary() %>%
+        ggplot(aes(age, rate, colour = sex)) +
+        geom_line(na.rm = TRUE) +
+        labs(y = "Injuries per 10,000 people")
+    }
+  }, res = 96)
+  
+  # Generate random narrative
+  narrative_sample <- eventReactive(
+    list(input$story, selected()),
+    selected() %>% pull(narrative) %>% sample(1)
+  )
+  output$narrative <- renderText({
+    req(narrative_sample())
+    narrative_sample()
+  })
+  
+  # Download handler for filtered data
+  output$download <- downloadHandler(
+    filename = function() {
+      paste0("injury_data_", input$code, ".csv")
+    },
+    content = function(file) {
+      write.csv(selected(), file, row.names = FALSE)
+    }
+  )
+}
+
+# Run the Shiny app
+shinyApp(ui, server)
+```
